@@ -446,6 +446,19 @@ DELETE FROM departments WHERE dept_id = 1;
 -- 8
 INSERT INTO employees VALUES (106, 'Grace', 0, 2);
 ```
+> [!NOTE]
+> ***Your Answer***
+>
+> | # | Statement | Result | Explanation |
+> |---|---|---|---|
+> | 1 | `INSERT employees (102, 'Carol', 70000, 1)` | **SUCCESS** | `emp_id` 102 is new, `dept_id` 1 exists, and salary is positive. Nothing is violated. |
+> | 2 | `INSERT employees (103, 'Dan', -5000, 1)` | **FAIL** | Salary of `-5000` violates `CHECK (salary >= 0)`. |
+> | 3 | `INSERT employees (100, 'Eve', 80000, 2)` | **FAIL** | `emp_id` 100 already exists (Alice), so this violates the primary key's uniqueness constraint. |
+> | 4 | `INSERT employees (104, 'Frank', 60000, 5)` | **FAIL** | `dept_id` 5 doesn't exist in `departments`, so this violates the foreign key constraint (referential integrity). |
+> | 5 | `INSERT departments (3, 'Engineering')` | **FAIL** | `dept_id` 3 is new, but `dept_name` 'Engineering' already exists, and `dept_name` is `UNIQUE`. |
+> | 6 | `INSERT employees (105, NULL, 55000, 2)` | **FAIL** | `name` is `NOT NULL`, and this tries to insert `NULL`. |
+> | 7 | `DELETE FROM departments WHERE dept_id = 1` | **FAIL** | Employee 100 (Alice) still references `dept_id` 1, and no `ON DELETE` action was specified, so PostgreSQL defaults to `NO ACTION`, which behaves like `RESTRICT` and blocks the delete. |
+> | 8 | `INSERT employees (106, 'Grace', 0, 2)` | **SUCCESS** | Salary of `0` satisfies `CHECK (salary >= 0)`, since the constraint allows zero, and `dept_id` 2 exists. |
 
 ### Exercise 3.2: Write the Constraints
 
@@ -458,6 +471,37 @@ Given these business rules for a **bookstore database**, write the `CREATE TABLE
 5. Publication year must be between 1450 and the current year.
 
 *(Hint: you'll need at least 4 tables, including a junction table for the M:N relationship.)*
+
+> [!NOTE]
+> ***Your SQL***
+>
+> ```sql
+> CREATE TABLE genres (
+>     genre_id   INTEGER      PRIMARY KEY,
+>     genre_name VARCHAR(50)  NOT NULL UNIQUE
+> );
+>
+> CREATE TABLE authors (
+>     author_id  INTEGER      PRIMARY KEY,
+>     first_name VARCHAR(50)  NOT NULL,
+>     last_name  VARCHAR(50)  NOT NULL
+> );
+>
+> CREATE TABLE books (
+>     isbn              CHAR(13)      PRIMARY KEY,
+>     title             VARCHAR(200)  NOT NULL,
+>     price             NUMERIC(10,2) NOT NULL CHECK (price > 0),
+>     publication_year  INTEGER       NOT NULL
+>                       CHECK (publication_year BETWEEN 1450 AND EXTRACT(YEAR FROM CURRENT_DATE)),
+>     genre_id          INTEGER       NOT NULL REFERENCES genres(genre_id)
+> );
+>
+> CREATE TABLE book_authors (
+>     isbn       CHAR(13) REFERENCES books(isbn),
+>     author_id  INTEGER  REFERENCES authors(author_id),
+>     PRIMARY KEY (isbn, author_id)
+> );
+> ```
 
 ---
 
@@ -482,25 +526,103 @@ A small public library needs a database. Here is a description of their requirem
 4. **Identify any candidate keys** beyond the primary key (alternate keys).
 5. **List the business rules** from the description and map each to a constraint type. Which rules cannot be enforced by simple constraints?
 
-
 > [!NOTE]
 > ***Your Answer***
 >
-> *(Write your answer here.)*
+> **1. Tables needed:**
 >
+> - `genres` (genre_id, genre_name)
+> - `books` (isbn, title, publication_year, genre_id)
+> - `copies` (copy_id, isbn, barcode)
+> - `members` (member_id, member_number, name, email, phone)
+> - `borrowings` (borrowing_id, member_id, copy_id, borrow_date, due_date, return_date)
 >
+> **2. Primary keys, surrogate vs natural:**
 >
+> - `genres.genre_id` — surrogate. A simple stable integer is enough; genre names could technically be reused or renamed later, so I didn't want the name itself as the identifier.
+> - `books.isbn` — natural key. The description explicitly says every book has an ISBN, and ISBNs are already globally unique and never change, so there is no reason to invent a surrogate `book_id` on top of it.
+> - `copies.copy_id` — surrogate. Even though each copy has a unique barcode (a natural key), I used a surrogate `copy_id` as the PK for simplicity and consistency with the other tables, and kept `barcode` as a `UNIQUE` alternate key instead.
+> - `members.member_id` — surrogate. The description mentions a "member number," which sounds like a natural key, but member numbers can sometimes be reissued or reformatted by libraries over time, so a surrogate `member_id` is the safer long-term PK, with `member_number` enforced as a unique alternate key.
+> - `borrowings.borrowing_id` — surrogate. I chose a single surrogate key here instead of a composite key like `(member_id, copy_id)`, because the same member can borrow the same copy more than once over time (borrow it, return it, borrow it again months later), so `(member_id, copy_id)` would not actually be unique across all rows.
 >
+> **3. Foreign keys:**
+>
+> - `books.genre_id` → `genres.genre_id`
+> - `copies.isbn` → `books.isbn`
+> - `borrowings.member_id` → `members.member_id`
+> - `borrowings.copy_id` → `copies.copy_id`
+>
+> **4. Candidate/alternate keys beyond the primary key:**
+>
+> - `copies.barcode` — alternate key (unique, since every copy has a unique barcode sticker)
+> - `members.member_number` — alternate key (unique, assuming the library assigns one per member)
+> - `members.email` — alternate key (unique, assuming no two members share an email)
+>
+> **5. Business rules and how they map to constraints:**
+>
+> | Business Rule | Constraint Type | Can simple constraints enforce it? |
+> |---|---|---|
+> | A member can borrow at most 5 copies at a time | None available as a simple constraint | **No.** This requires counting a member's currently unreturned borrowings across multiple rows, which a single-row CHECK constraint cannot do. This needs a trigger or application-level logic. |
+> | The due date is always 14 days after the borrow date | Generated column | **Yes**, using `due_date GENERATED ALWAYS AS (borrow_date + 14) STORED`, PostgreSQL computes it automatically and it can never drift out of sync. |
+> | A copy cannot be borrowed if it's currently not returned | Partial unique index | **Yes**, a partial unique index on `borrowings(copy_id) WHERE return_date IS NULL` ensures a copy can only appear once among "currently active" borrowings, effectively preventing double-borrowing without needing a trigger. |
+
 6. **Write the CREATE TABLE statements** for at least the `books`, `copies`, and `borrowings` tables with full constraints.
+
+> [!NOTE]
+> ***Your SQL***
+>
+> ```sql
+> CREATE TABLE genres (
+>     genre_id   INTEGER      PRIMARY KEY,
+>     genre_name VARCHAR(50)  NOT NULL UNIQUE
+> );
+>
+> CREATE TABLE books (
+>     isbn              CHAR(13)      PRIMARY KEY,
+>     title             VARCHAR(200)  NOT NULL,
+>     publication_year  INTEGER       NOT NULL
+>                       CHECK (publication_year BETWEEN 1450 AND EXTRACT(YEAR FROM CURRENT_DATE)),
+>     genre_id          INTEGER       NOT NULL REFERENCES genres(genre_id)
+> );
+>
+> CREATE TABLE members (
+>     member_id     INTEGER      PRIMARY KEY,
+>     member_number VARCHAR(20)  NOT NULL UNIQUE,
+>     name          VARCHAR(100) NOT NULL,
+>     email         VARCHAR(255) NOT NULL UNIQUE,
+>     phone         VARCHAR(20)
+> );
+>
+> CREATE TABLE copies (
+>     copy_id  INTEGER      PRIMARY KEY,
+>     isbn     CHAR(13)     NOT NULL REFERENCES books(isbn),
+>     barcode  VARCHAR(30)  NOT NULL UNIQUE
+> );
+>
+> CREATE TABLE borrowings (
+>     borrowing_id INTEGER   PRIMARY KEY,
+>     member_id    INTEGER   NOT NULL REFERENCES members(member_id),
+>     copy_id      INTEGER   NOT NULL REFERENCES copies(copy_id),
+>     borrow_date  DATE      NOT NULL DEFAULT CURRENT_DATE,
+>     due_date     DATE      GENERATED ALWAYS AS (borrow_date + 14) STORED,
+>     return_date  DATE
+> );
+>
+> -- Enforces "a copy cannot be borrowed if it's currently not returned":
+> -- only one active (unreturned) borrowing per copy is allowed at a time
+> CREATE UNIQUE INDEX one_active_borrowing_per_copy
+>     ON borrowings (copy_id)
+>     WHERE return_date IS NULL;
+> ```
 
 ---
 
 ## Submission Checklist
 
-- [ ] Task 1: Key identification answers (Part 1)
-- [ ] Task 2: Business rules table with 5 rules (Part 1)
-- [ ] Task 3: Integrity violation predictions with explanations (Part 1)
-- [ ] Task 4: Foreign key action analysis (Part 1)
-- [ ] Theory Review Questions answered (Part 2)
-- [ ] SQL Practice — constraint predictions and bookstore CREATE TABLE (Part 3)
-- [ ] Library System design exercise (Part 4)
+- [*] Task 1: Key identification answers (Part 1)
+- [*] Task 2: Business rules table with 5 rules (Part 1)
+- [*] Task 3: Integrity violation predictions with explanations (Part 1)
+- [*] Task 4: Foreign key action analysis (Part 1)
+- [*] Theory Review Questions answered (Part 2)
+- [*] SQL Practice — constraint predictions and bookstore CREATE TABLE (Part 3)
+- [*] Library System design exercise (Part 4)
