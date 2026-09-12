@@ -89,20 +89,18 @@ Example:
 | ... | ... | ... | ... |
 
 Think about rules for customers, orders, and categories — not just products.
-
 > [!NOTE]
 > ***Your Answer***
 >
-> *| Business Rule | Constraint Type | Table.Column | SQL |
-|---|---|---|---|
-| Every product must have a price greater than zero | CHECK | `products.price` | `CHECK (price > 0)` |
-| Customer email addresses must be unique | UNIQUE | `customers.email` | `email VARCHAR(255) UNIQUE` |
-| Every order must be placed by an existing customer | NOT NULL + FOREIGN KEY | `orders.customer_id` | `customer_id INTEGER NOT NULL REFERENCES customers(customer_id)` |
-| Category names must be unique | UNIQUE | `categories.category_name` | `category_name VARCHAR(50) NOT NULL UNIQUE` |
-| Each line item's quantity must be a positive number | CHECK | `order_items.quantity` | `CHECK (quantity > 0)` |*
+> | Business Rule | Constraint Type | Table.Column | SQL |
+> |---|---|---|---|
+> | Every product must have a price greater than zero | CHECK | `products.price` | `CHECK (price > 0)` |
+> | Customer email addresses must be unique | UNIQUE | `customers.email` | `email VARCHAR(255) UNIQUE` |
+> | Every order must be placed by an existing customer | NOT NULL + FOREIGN KEY | `orders.customer_id` | `customer_id INTEGER NOT NULL REFERENCES customers(customer_id)` |
+> | Category names must be unique | UNIQUE | `categories.category_name` | `category_name VARCHAR(50) NOT NULL UNIQUE` |
+> | Each line item's quantity must be a positive number | CHECK | `order_items.quantity` | `CHECK (quantity > 0)` |
 >
-
-
+> 
 ### Task 3: Integrity Violations
 
 For each SQL statement below, predict whether it will **succeed** or **fail**. If it fails, explain which integrity rule or constraint is violated and what error message you'd expect. Assume the schema from Section 9.8 of the Theory material.
@@ -140,24 +138,19 @@ VALUES (113, 'LightStep Shoes', 149.00, -3, 1);
 INSERT INTO order_items (order_id, product_id, quantity, unit_price)
 VALUES (1001, 101, 0, 189.50);
 ```
-
 > [!NOTE]
 > ***Your Answer***
 >
-> *| # | Result | Explanation |
-|---|---|---|
-| **A** | **FAIL** | `category_id` is the primary key of `categories`, and a primary key can never be `NULL` (that's entity integrity). Expected error: `null value in column "category_id" of relation "categories" violates not-null constraint`. |
-| **B** | **SUCCESS** | `product_id` 109 is new, `category_id` 2 already exists, the name is unique, and the price and stock values are both valid. Nothing here breaks a rule. |
-| **C** | **FAIL** | A price of `-5.00` breaks the `CHECK (price > 0)` constraint. Expected error: `new row for relation "products" violates check constraint "products_price_check"`. |
-| **D** | **FAIL** | `product_id` 103 already exists (it's `GripWall Climbing Shoes`), so this breaks the primary key's uniqueness rule. Expected error: `duplicate key value violates unique constraint "products_pkey"`. |
-| **E** | **FAIL** | `category_id` 10 doesn't exist anywhere in `categories`, so this is an orphan record and a referential integrity violation. Expected error: `insert or update on table "products" violates foreign key constraint "products_category_id_fkey"`. |
-| **F** | **FAIL** | `name` is `NOT NULL`, and this statement tries to insert `NULL` for it. Expected error: `null value in column "name" of relation "products" violates not-null constraint`. |
-| **G** | **FAIL** | A stock quantity of `-3` breaks `CHECK (stock_quantity >= 0)`. Expected error: `new row for relation "products" violates check constraint "products_stock_quantity_check"`. |
-| **H** | **FAIL** | A quantity of `0` breaks `CHECK (quantity > 0)` on `order_items`. Expected error: `new row for relation "order_items" violates check constraint`. Worth noting: this would also depend on whether order 1001 actually exists in `orders`, but even if it did, the quantity check alone is enough to fail this insert. |*
->
->
->
->
+> | # | Result | Explanation |
+> |---|---|---|
+> | **A** | **FAIL** | `category_id` is the primary key of `categories`, and a primary key can never be `NULL` (that's entity integrity). Expected error: `null value in column "category_id" of relation "categories" violates not-null constraint`. |
+> | **B** | **SUCCESS** | `product_id` 109 is new, `category_id` 2 already exists, the name is unique, and the price and stock values are both valid. Nothing here breaks a rule. |
+> | **C** | **FAIL** | A price of `-5.00` breaks the `CHECK (price > 0)` constraint. Expected error: `new row for relation "products" violates check constraint "products_price_check"`. |
+> | **D** | **FAIL** | `product_id` 103 already exists (it's `GripWall Climbing Shoes`), so this breaks the primary key's uniqueness rule. Expected error: `duplicate key value violates unique constraint "products_pkey"`. |
+> | **E** | **FAIL** | `category_id` 10 doesn't exist anywhere in `categories`, so this is an orphan record and a referential integrity violation. Expected error: `insert or update on table "products" violates foreign key constraint "products_category_id_fkey"`. |
+> | **F** | **FAIL** | `name` is `NOT NULL`, and this statement tries to insert `NULL` for it. Expected error: `null value in column "name" of relation "products" violates not-null constraint`. |
+> | **G** | **FAIL** | A stock quantity of `-3` breaks `CHECK (stock_quantity >= 0)`. Expected error: `new row for relation "products" violates check constraint "products_stock_quantity_check"`. |
+> | **H** | **FAIL** | A quantity of `0` breaks `CHECK (quantity > 0)` on `order_items`. Expected error: `new row for relation "order_items" violates check constraint`. Worth noting: this would also depend on whether order 1001 actually exists in `orders`, but even if it did, the quantity check alone is enough to fail this insert. |
 
 ### Task 4: Foreign Key Actions
 
